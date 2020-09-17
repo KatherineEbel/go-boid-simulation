@@ -24,7 +24,7 @@ var (
 	}
 	boids   [boidCount]*Boid
 	boidMap [screenWidth + 1][screenHeight + 1]int
-	lock    = sync.Mutex{}
+	rwLock  = sync.RWMutex{}
 )
 
 func update(screen *ebiten.Image) error {

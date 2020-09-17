@@ -31,25 +31,13 @@ func createBoid(bid int) {
 
 func (b *Boid) moveOne() {
 	accel := b.calculateAcceleration() // make sure to cal acceleration first since it tries to acquire lock to thread also
-	lock.Lock()
+	rwLock.Lock()
 	b.velocity = b.velocity.Add(accel).limit(-1, 1)
 	boidMap[int(b.position.x)][int(b.position.y)] = -1
 	b.position = b.position.Add(b.velocity)
 	boidMap[int(b.position.x)][int(b.position.y)] = b.id
-	next := b.position.Add(b.velocity)
-	if next.x >= screenWidth || next.x < 0 {
-		b.velocity = Vector2D{
-			x: -b.velocity.x,
-			y: b.velocity.y,
-		}
-	}
-	if next.y >= screenHeight || next.y < 0 {
-		b.velocity = Vector2D{
-			x: b.velocity.x,
-			y: -b.velocity.y,
-		}
-	}
-	lock.Unlock()
+
+	rwLock.Unlock()
 }
 
 func (b *Boid) start() {
@@ -59,13 +47,22 @@ func (b *Boid) start() {
 	}
 }
 
+func (b Boid) borderBounce(pos, maxBorderPos float64) float64 {
+	if pos < viewRadius {
+		return 1 / pos
+	} else if pos > maxBorderPos-viewRadius {
+		return 1 / (pos - maxBorderPos)
+	}
+	return 0
+}
+
 func (b *Boid) calculateAcceleration() Vector2D {
 	// upper right and lower left of box
 	upper, lower := b.position.AddV(viewRadius), b.position.AddV(-viewRadius)
-	avgPos, avgVel := Vector2D{0, 0}, Vector2D{0, 0}
+	avgPos, avgVel, separation := Vector2D{0, 0}, Vector2D{0, 0}, Vector2D{0, 0}
 	count := 0.0
 
-	lock.Lock()
+	rwLock.RLock()
 	for i := math.Max(lower.x, 0); i <= math.Min(upper.x, screenWidth); i++ {
 		for j := math.Max(lower.y, 0); j <= math.Min(upper.y, screenHeight); j++ {
 			if otherBoidId := boidMap[int(i)][int(j)]; otherBoidId != -1 && otherBoidId != b.id {
@@ -73,17 +70,19 @@ func (b *Boid) calculateAcceleration() Vector2D {
 					count++
 					avgVel = avgVel.Add(boids[otherBoidId].velocity)
 					avgPos = avgPos.Add(boids[otherBoidId].position)
+					separation = separation.Add(b.position.Subtract(boids[otherBoidId].position).DivisionV(dist))
 				}
 			}
 		}
 	}
-	lock.Unlock()
-	accel := Vector2D{0, 0}
+	rwLock.RUnlock()
+	accel := Vector2D{b.borderBounce(b.position.x, screenWidth), b.borderBounce(b.position.y, screenHeight)}
 	if count > 0 {
 		avgPos, avgVel = avgPos.DivisionV(count), avgVel.DivisionV(count)
 		accelAlignment := avgVel.Subtract(b.velocity).MultiplyV(adjRate)
 		accelCohesion := avgPos.Subtract(b.position).MultiplyV(adjRate)
-		accel = accel.Add(accelAlignment).Add(accelCohesion)
+		accelSeparation := separation.MultiplyV(adjRate)
+		accel = accel.Add(accelAlignment).Add(accelCohesion).Add(accelSeparation)
 	}
 	return accel
 }
