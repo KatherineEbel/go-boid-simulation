@@ -11,8 +11,8 @@ import (
 const (
 	screenWidth, screenHeight = 640, 360
 	boidCount                 = 500
-	viewRadius                = 13
-	adjRate                   = 0.015
+	viewRadius                = 13    // num pixels each boid can see
+	adjRate                   = 0.015 // will determine how smooth simulation is
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 	}
 	boids   [boidCount]*Boid
 	boidMap [screenWidth + 1][screenHeight + 1]int
-	rWlock  = sync.RWMutex{}
+	lock    = sync.Mutex{}
 )
 
 func update(screen *ebiten.Image) error {
@@ -39,6 +39,12 @@ func update(screen *ebiten.Image) error {
 	return nil
 }
 func main() {
+	// set all boids initial positions on screen to -1
+	for i, row := range boidMap {
+		for j := range row {
+			boidMap[i][j] = -1
+		}
+	}
 	for i := 0; i < boidCount; i++ {
 		createBoid(i)
 	}
